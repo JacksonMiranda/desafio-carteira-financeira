@@ -1,8 +1,8 @@
 {
   "name": "carteira-api",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "API de carteira financeira (cadastro, autenticação, depósito, transferência e reversão)",
+  "author": "Jackson Jovino Miranda",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
