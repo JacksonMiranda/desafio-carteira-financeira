@@ -3,6 +3,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type';
 import { DepositDto } from './dto/deposit.dto';
+import { TransferDto } from './dto/transfer.dto';
 import { WalletService } from './wallet.service';
 
 @UseGuards(JwtAuthGuard)
@@ -26,5 +27,17 @@ export class WalletController {
     @Body() depositDto: DepositDto,
   ) {
     return this.walletService.deposit(user.userId, depositDto.amount);
+  }
+
+  @Post('transfer')
+  transfer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() transferDto: TransferDto,
+  ) {
+    return this.walletService.transfer(
+      user.userId,
+      transferDto.receiverEmail,
+      transferDto.amount,
+    );
   }
 }

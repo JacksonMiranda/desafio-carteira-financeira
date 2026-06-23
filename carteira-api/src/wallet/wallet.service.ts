@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma, TransactionStatus, TransactionType } from '@prisma/client';
 import { centsToReais, reaisToCents } from '../common/money';
 import { PrismaService } from '../prisma/prisma.service';
@@ -85,6 +90,70 @@ export class WalletService {
       });
 
       return { balance: updated.balance, transactionId: transaction.id };
+    });
+
+    return {
+      balance: centsToReais(result.balance),
+      transactionId: result.transactionId,
+    };
+  }
+
+  async transfer(
+    userId: string,
+    receiverEmail: string,
+    amount: number,
+  ): Promise<OperationResult> {
+    const amountInCents = reaisToCents(amount);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const senderWallet = await this.getWalletByUserId(userId, tx);
+
+      const receiver = await tx.user.findUnique({
+        where: { email: receiverEmail },
+        select: { wallet: { select: { id: true } } },
+      });
+
+      if (!receiver?.wallet) {
+        throw new NotFoundException('Destinatário não encontrado.');
+      }
+
+      if (receiver.wallet.id === senderWallet.id) {
+        throw new BadRequestException(
+          'Não é possível transferir para a própria carteira.',
+        );
+      }
+
+      // Débito condicional: só desconta se houver saldo suficiente. Evita a
+      // condição de corrida entre transferências simultâneas da mesma carteira.
+      const debit = await tx.wallet.updateMany({
+        where: { id: senderWallet.id, balance: { gte: amountInCents } },
+        data: { balance: { decrement: amountInCents } },
+      });
+
+      if (debit.count === 0) {
+        throw new UnprocessableEntityException('Saldo insuficiente.');
+      }
+
+      await tx.wallet.update({
+        where: { id: receiver.wallet.id },
+        data: { balance: { increment: amountInCents } },
+      });
+
+      const transaction = await tx.transaction.create({
+        data: {
+          type: TransactionType.TRANSFER,
+          amount: amountInCents,
+          senderWalletId: senderWallet.id,
+          receiverWalletId: receiver.wallet.id,
+        },
+      });
+
+      const updatedSender = await tx.wallet.findUniqueOrThrow({
+        where: { id: senderWallet.id },
+        select: { balance: true },
+      });
+
+      return { balance: updatedSender.balance, transactionId: transaction.id };
     });
 
     return {
