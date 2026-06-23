@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -17,6 +18,11 @@ export interface BalanceView {
 export interface OperationResult {
   balance: number;
   transactionId: string;
+}
+
+export interface ReversalResult {
+  balance: number;
+  reversalTransactionId: string;
 }
 
 export interface TransactionView {
@@ -160,6 +166,98 @@ export class WalletService {
       balance: centsToReais(result.balance),
       transactionId: result.transactionId,
     };
+  }
+
+  async reverse(
+    userId: string,
+    transactionId: string,
+  ): Promise<ReversalResult> {
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const wallet = await this.getWalletByUserId(userId, tx);
+
+        const original = await tx.transaction.findUnique({
+          where: { id: transactionId },
+        });
+
+        if (!original) {
+          throw new NotFoundException('Transação não encontrada.');
+        }
+
+        const isParticipant =
+          original.senderWalletId === wallet.id ||
+          original.receiverWalletId === wallet.id;
+
+        if (!isParticipant) {
+          throw new ForbiddenException('Você não participa desta transação.');
+        }
+
+        if (original.type === TransactionType.REVERSAL) {
+          throw new UnprocessableEntityException(
+            'Uma reversão não pode ser revertida.',
+          );
+        }
+
+        if (original.status === TransactionStatus.REVERSED) {
+          throw new UnprocessableEntityException('Transação já foi revertida.');
+        }
+
+        // A reversão desfaz o movimento original. Ela tem prioridade sobre o
+        // saldo e pode deixá-lo negativo (cenário previsto no enunciado).
+        if (original.senderWalletId) {
+          await tx.wallet.update({
+            where: { id: original.senderWalletId },
+            data: { balance: { increment: original.amount } },
+          });
+        }
+
+        if (original.receiverWalletId) {
+          await tx.wallet.update({
+            where: { id: original.receiverWalletId },
+            data: { balance: { decrement: original.amount } },
+          });
+        }
+
+        await tx.transaction.update({
+          where: { id: original.id },
+          data: { status: TransactionStatus.REVERSED },
+        });
+
+        const reversal = await tx.transaction.create({
+          data: {
+            type: TransactionType.REVERSAL,
+            amount: original.amount,
+            // Inverte o fluxo de dinheiro em relação à transação original.
+            senderWalletId: original.receiverWalletId,
+            receiverWalletId: original.senderWalletId,
+            relatedTransactionId: original.id,
+          },
+        });
+
+        const updatedWallet = await this.getWalletByUserId(userId, tx);
+
+        return {
+          balance: updatedWallet.balance,
+          reversalTransactionId: reversal.id,
+        };
+      });
+
+      return {
+        balance: centsToReais(result.balance),
+        reversalTransactionId: result.reversalTransactionId,
+      };
+    } catch (error) {
+      // A constraint única em relatedTransactionId barra, no banco, reversões
+      // concorrentes da mesma transação.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new UnprocessableEntityException('Transação já foi revertida.');
+      }
+
+      throw error;
+    }
   }
 
   private async getWalletByUserId(
