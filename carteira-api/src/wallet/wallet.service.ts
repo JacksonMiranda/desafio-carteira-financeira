@@ -1,12 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TransactionStatus, TransactionType } from '@prisma/client';
-import { centsToReais } from '../common/money';
+import { centsToReais, reaisToCents } from '../common/money';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type TransactionDirection = 'IN' | 'OUT';
 
 export interface BalanceView {
   balance: number;
+}
+
+export interface OperationResult {
+  balance: number;
+  transactionId: string;
 }
 
 export interface TransactionView {
@@ -57,6 +62,35 @@ export class WalletService {
       amount: centsToReais(transaction.amount),
       createdAt: transaction.createdAt,
     }));
+  }
+
+  async deposit(userId: string, amount: number): Promise<OperationResult> {
+    const amountInCents = reaisToCents(amount);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const wallet = await this.getWalletByUserId(userId, tx);
+
+      const transaction = await tx.transaction.create({
+        data: {
+          type: TransactionType.DEPOSIT,
+          amount: amountInCents,
+          receiverWalletId: wallet.id,
+        },
+      });
+
+      // Depósito é sempre um incremento: se o saldo estava negativo, ele sobe.
+      const updated = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { increment: amountInCents } },
+      });
+
+      return { balance: updated.balance, transactionId: transaction.id };
+    });
+
+    return {
+      balance: centsToReais(result.balance),
+      transactionId: result.transactionId,
+    };
   }
 
   private async getWalletByUserId(
