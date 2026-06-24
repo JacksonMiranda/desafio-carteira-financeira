@@ -13,6 +13,8 @@ export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async deposit(userId: string, amountInCents: number) {
+    const amount = BigInt(amountInCents);
+
     return this.prisma.$transaction(async (tx) => {
       const wallet = await tx.wallet.findUnique({ where: { userId } });
 
@@ -22,14 +24,14 @@ export class TransactionsService {
 
       const updatedWallet = await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: { increment: amountInCents } },
+        data: { balance: { increment: amount } },
       });
 
       const transaction = await tx.transaction.create({
         data: {
           type: TransactionType.DEPOSIT,
           status: TransactionStatus.COMPLETED,
-          amount: amountInCents,
+          amount,
           receiverWalletId: wallet.id,
           senderWalletId: null,
         },
@@ -107,7 +109,7 @@ export class TransactionsService {
         data: {
           type: TransactionType.TRANSFER,
           status: TransactionStatus.COMPLETED,
-          amount: amountInCents,
+          amount,
           senderWalletId: senderWallet.id,
           receiverWalletId: receiverWallet.id,
         },
@@ -171,7 +173,13 @@ export class TransactionsService {
         where: { id: original.id },
       });
 
-      if (reloaded?.status === TransactionStatus.REVERSED) {
+      // A transação pode ter sumido entre o pré-check e o FOR UPDATE; sem este
+      // guard, o update adiante lançaria P2025 e devolveria 500 em vez de 404.
+      if (!reloaded) {
+        throw new NotFoundException('Transação não encontrada.');
+      }
+
+      if (reloaded.status === TransactionStatus.REVERSED) {
         throw new ConflictException('Transação já revertida.');
       }
 

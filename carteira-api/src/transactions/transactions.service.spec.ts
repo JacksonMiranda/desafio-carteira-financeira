@@ -136,13 +136,13 @@ describe('TransactionsService', () => {
 
       expect(txMock.wallet.update).toHaveBeenCalledWith({
         where: { id: walletA.id },
-        data: { balance: { increment: 1000 } },
+        data: { balance: { increment: BigInt(1000) } },
       });
       expect(txMock.transaction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           type: TransactionType.DEPOSIT,
           status: TransactionStatus.COMPLETED,
-          amount: 1000,
+          amount: BigInt(1000),
           receiverWalletId: walletA.id,
           senderWalletId: null,
         }),
@@ -359,6 +359,21 @@ describe('TransactionsService', () => {
       await expect(
         service.reverse(walletA.userId, depositTx.id),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('lança NotFoundException quando a transação some entre o pré-check e o lock', async () => {
+      // Raça: passa no pré-check, mas a releitura pós-lock retorna null.
+      const { prisma, txMock } = makePrisma();
+      const service = new TransactionsService(prisma as any);
+
+      prisma.wallet.findUnique.mockResolvedValue(walletA);
+      prisma.transaction.findUnique.mockResolvedValue(depositTx); // pré-check: existe
+      txMock.$queryRaw.mockResolvedValue([]);
+      txMock.transaction.findUnique.mockResolvedValue(null); // sumiu após o lock
+
+      await expect(
+        service.reverse(walletA.userId, depositTx.id),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('reverte DEPOSIT: debita receiverWallet e aceita saldo negativo', async () => {
