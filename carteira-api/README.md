@@ -1,6 +1,8 @@
 # Carteira API
 
-API REST da carteira financeira: cadastro e autenticação de usuários e (em construção) as operações de saldo — depósito, transferência e reversão.
+API REST da carteira financeira: cadastro e autenticação de usuários e as operações de saldo — depósito, transferência e reversão.
+
+> **Valores em centavos.** Os montantes trafegam como inteiros em centavos e são persistidos como `BigInt` (serializado como string no JSON) para evitar imprecisão de ponto flutuante. A formatação em reais fica a cargo do cliente.
 
 ## Tecnologias
 
@@ -59,15 +61,39 @@ Autenticação:
 - `POST /auth/login` — autentica e retorna o `access_token`
 - `GET /auth/profile` — dados do usuário autenticado (requer `Bearer token`)
 
+Transações (todas exigem `Bearer token`):
+
+- `POST /transactions/deposit` — deposita `{ amount }` (centavos) na carteira
+- `POST /transactions/transfer` — transfere `{ receiverId, amount }` para outro usuário
+- `POST /transactions/:id/reverse` — reverte um depósito ou transferência
+- `GET /transactions/balance` — saldo atual (em centavos)
+- `GET /transactions` — histórico, com `direction` (`IN`/`OUT`) por transação
+
+### Documentação interativa (Swagger)
+
+Com a API no ar, acesse `http://localhost:3000/docs`. Use o botão **Authorize**
+para colar o `access_token` e testar as rotas protegidas.
+
 ## Estrutura
 
 ```
 src/
-├── auth/      # autenticação (JWT, guard, strategy e DTOs)
-├── users/     # cadastro de usuários
-├── prisma/    # acesso ao banco
-└── common/    # utilidades compartilhadas (ex.: pipe de validação)
+├── auth/          # autenticação (JWT, guard, strategy e DTOs)
+├── users/         # cadastro de usuários
+├── transactions/  # depósito, transferência, reversão, saldo e extrato
+├── prisma/        # acesso ao banco
+└── common/        # utilidades compartilhadas (validação, serializer de BigInt)
 ```
+
+## Testes
+
+```bash
+npm run test       # unitários (serviço de transações + validação de DTO)
+npm run test:e2e   # integração: fluxo completo contra um Postgres real
+```
+
+Os testes e2e aplicam as migrations num schema isolado (`e2e`) e limpam os
+dados entre os casos, então exigem o **PostgreSQL do Docker Compose no ar**.
 
 ## Variáveis de ambiente
 
