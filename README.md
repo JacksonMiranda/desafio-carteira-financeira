@@ -24,36 +24,48 @@ depositam, transferem saldo entre si e revertem operações.
 
 ## Como rodar
 
-### 1. Backend
+### Opção A — tudo no Docker (recomendado)
+
+Sobe PostgreSQL, API e frontend com um comando. As migrations são aplicadas
+automaticamente quando a API inicia.
 
 ```bash
-cd carteira-api
-cp .env.example .env
-docker compose up -d        # PostgreSQL
-npm install
-npx prisma migrate deploy
-npx prisma generate
-npm run start:dev
+docker compose up --build
 ```
 
-API em `http://localhost:3000` · documentação em `http://localhost:3000/docs`.
+- Frontend: `http://localhost:3001`
+- API: `http://localhost:3000` · documentação: `http://localhost:3000/docs`
 
-### 2. Frontend
+Variáveis (`POSTGRES_*`, `JWT_SECRET`, `JWT_EXPIRES_IN`) têm defaults no
+`docker-compose.yml` e podem ser sobrescritas por um `.env` na raiz.
+
+### Opção B — desenvolvimento local (app fora do Docker)
+
+Sobe apenas o banco no Docker e roda API e web localmente, com hot reload.
 
 ```bash
+# banco
+docker compose up -d postgres
+
+# API
+cd carteira-api
+cp .env.example .env
+npm install
+npx prisma migrate deploy && npx prisma generate
+npm run start:dev          # http://localhost:3000
+
+# frontend (em outro terminal)
 cd carteira-web
 cp .env.example .env        # API_URL=http://localhost:3000
 npm install
-npm run dev
+npm run dev                 # porta livre seguinte, ex.: http://localhost:3001
 ```
-
-A API ocupa a porta 3000, então o Next sobe na próxima livre (ex.:
-`http://localhost:3001`) — confira o log do `npm run dev`.
 
 ## Testes (backend)
 
 ```bash
+docker compose up -d postgres   # os testes e2e exigem o banco no ar
 cd carteira-api
 npm run test       # unitários
-npm run test:e2e   # integração (exige o PostgreSQL no ar)
+npm run test:e2e   # integração contra o PostgreSQL
 ```

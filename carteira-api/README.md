@@ -23,8 +23,8 @@ API REST da carteira financeira: cadastro e autenticação de usuários e as ope
 # variáveis de ambiente
 cp .env.example .env
 
-# sobe o PostgreSQL
-docker compose up -d
+# sobe o PostgreSQL (compose na raiz do repositório)
+docker compose -f ../docker-compose.yml up -d postgres
 
 # dependências
 npm install
@@ -33,6 +33,9 @@ npm install
 npx prisma migrate deploy
 npx prisma generate
 ```
+
+> Para rodar a stack inteira em containers (API + web + banco), use
+> `docker compose up --build` na raiz do repositório.
 
 ## Execução
 
