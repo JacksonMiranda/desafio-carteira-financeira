@@ -154,7 +154,15 @@ describe('Transactions (e2e)', () => {
 
     const walletAId = deposit.transaction.receiverWalletId!;
 
-    // Registro aparece no histórico
+    // GET /transactions/balance reflete o depósito
+    const balanceAfterDeposit = await request(app.getHttpServer())
+      .get('/transactions/balance')
+      .set(authHeader(tokenA))
+      .expect(200);
+
+    expect(balanceAfterDeposit.body).toEqual({ balance: String(DEPOSIT_AMOUNT) });
+
+    // Registro aparece no histórico, anotado como entrada (IN)
     const listAfterDeposit = await request(app.getHttpServer())
       .get('/transactions')
       .set(authHeader(tokenA))
@@ -164,6 +172,7 @@ describe('Transactions (e2e)', () => {
     expect(listAfterDeposit.body[0]).toMatchObject({
       type: 'DEPOSIT',
       status: 'COMPLETED',
+      direction: 'IN',
     });
 
     // 4. Transferência A → B — verifica saldos de A e B
