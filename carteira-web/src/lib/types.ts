@@ -17,3 +17,6 @@ export type Transaction = {
 };
 
 export type Balance = { balance: string };
+
+// Destinatário exibido na busca de transferência.
+export type Contact = { id: string; name: string; email: string };

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { transferAction, type OpState } from '@/app/actions';
 import { ErrorAlert, SubmitButton, TextField } from './form';
+import { RecipientPicker } from './recipient-picker';
 
 const initialState: OpState = {};
 
@@ -15,11 +16,7 @@ export function TransferForm() {
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <h2 className="font-semibold">Transferir</h2>
-      <TextField
-        label="ID do destinatário"
-        name="receiverId"
-        placeholder="UUID do usuário"
-      />
+      <RecipientPicker />
       <TextField
         label="Valor (R$)"
         name="amount"
